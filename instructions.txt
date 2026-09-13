@@ -1,0 +1,171 @@
+================================================================================
+          UA-GNN JOURNAL EXTENSION (SNCS) - EXPERIMENT RUNBOOK & GUIDE
+================================================================================
+
+This document provides complete, step-by-step instructions and commands for
+anyone who pulls this repository from GitHub to execute all remaining training,
+evaluation, ablation, figure generation, and results aggregation tasks.
+
+--------------------------------------------------------------------------------
+1. ENVIRONMENT SETUP & DEPENDENCIES
+--------------------------------------------------------------------------------
+After cloning the repository, create a virtual environment and install the required
+packages:
+
+# Create and activate virtual environment (Linux/Mac)
+python3 -m venv venv
+source venv/bin/activate
+
+# (Windows PowerShell)
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# Install required dependencies
+pip install -r requirements.txt
+
+
+--------------------------------------------------------------------------------
+2. DATASET PREPARATION & PREPROCESSING (STEP 1)
+--------------------------------------------------------------------------------
+The repository uses METR-LA (207 sensors) and PEMS-BAY (325 sensors).
+
+If the raw data files are not already in your data/ folder:
+1. Download metr-la.h5, pems-bay.h5, adj_mx.pkl, and adj_mx_bay.pkl from the
+   official DCRNN Google Drive: https://drive.google.com/open?id=10FOTa6HXPqX8Pf5WRoRwcFnW9BrNZEIX
+2. Place them into:
+   - data/metr-la/metr-la.h5
+   - data/metr-la/adj_mx.pkl
+   - data/pems-bay/pems-bay.h5
+   - data/pems-bay/adj_mx_bay.pkl
+
+Run the preprocessing script to generate 70/10/20 chronological splits:
+
+# Preprocess METR-LA (generates train.npz, val.npz, test.npz)
+python scripts/generate_training_data.py --output_dir=data/metr-la/ --traffic_df_filename=data/metr-la/metr-la.h5
+
+# Preprocess PEMS-BAY (generates train.npz, val.npz, test.npz)
+python scripts/generate_training_data.py --output_dir=data/pems-bay/ --traffic_df_filename=data/pems-bay/pems-bay.h5
+
+
+--------------------------------------------------------------------------------
+3. TRAINING UA-GNN (STEP 3)
+--------------------------------------------------------------------------------
+Train the UA-GNN model on METR-LA and PEMS-BAY.
+(Training runs for 50 epochs with Hybrid MSE + NLL loss and lambda annealing).
+
+# Train on METR-LA (saves best checkpoint to results/metr-la/best_model.pt)
+python train.py --config configs/metr_la.yaml
+
+# Train on PEMS-BAY (saves best checkpoint to results/pems-bay/best_model.pt)
+python train.py --config configs/pems_bay.yaml
+
+
+--------------------------------------------------------------------------------
+4. STANDARD EVALUATION & HORIZON METRICS (STEPS 4 & 5)
+--------------------------------------------------------------------------------
+Run evaluation on test sets to produce MAE, RMSE, R2, Pearson correlation,
+Aleatoric Uncertainty, Epistemic Uncertainty (MC Dropout with 10 passes),
+Expected Calibration Error (ECE), and Horizon-specific results (15, 30, 45, 60 min).
+
+# Evaluate PEMS-BAY (confirms reproducibility within +/- 0.05 MAE)
+python evaluate.py \
+  --config configs/pems_bay.yaml \
+  --model_path results/pems-bay/best_model.pt \
+  --output_dir results/pems-bay/eval/
+
+# Evaluate METR-LA
+python evaluate.py \
+  --config configs/metr_la.yaml \
+  --model_path results/metr-la/best_model.pt \
+  --output_dir results/metr-la/eval/
+
+Outputs generated in results/<dataset>/eval/:
+- results_summary.txt  (Summary metrics & horizon breakdown)
+- y_true.npy           (Ground truth test arrays)
+- y_pred_mean.npy      (Predicted means)
+- y_pred_std.npy       (Predicted total standard deviations)
+- reliability_diagram.png / .pdf (Calibration curve)
+
+
+--------------------------------------------------------------------------------
+5. EXTENDED SENSOR DROPOUT EXPERIMENTS (STEP 6)
+--------------------------------------------------------------------------------
+Evaluate model robustness under 0% to 50% random sensor failure rates across
+5 random seeds (averaging results for statistical confidence).
+
+# Run sensor dropout on METR-LA:
+# (Linux/Mac Bash / Git Bash)
+for rate in 0.0 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50; do
+    python evaluate.py --config configs/metr_la.yaml --model_path results/metr-la/best_model.pt --dropout_rate $rate --num_seeds 5 --output_dir results/metr-la/dropout/rate_${rate}/
+done
+
+# Run sensor dropout on PEMS-BAY:
+for rate in 0.0 0.05 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.45 0.50; do
+    python evaluate.py --config configs/pems_bay.yaml --model_path results/pems-bay/best_model.pt --dropout_rate $rate --num_seeds 5 --output_dir results/pems-bay/dropout/rate_${rate}/
+done
+
+# (Windows PowerShell Alternative)
+$rates = @(0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50)
+foreach ($r in $rates) {
+    python evaluate.py --config configs/metr_la.yaml --model_path results/metr-la/best_model.pt --dropout_rate $r --num_seeds 5 --output_dir results/metr-la/dropout/rate_$r/
+    python evaluate.py --config configs/pems_bay.yaml --model_path results/pems-bay/best_model.pt --dropout_rate $r --num_seeds 5 --output_dir results/pems-bay/dropout/rate_$r/
+}
+
+
+--------------------------------------------------------------------------------
+6. EXTENDED ABLATION STUDY (STEP 9)
+--------------------------------------------------------------------------------
+A. Deep Ensemble (3 models with different seeds) vs. MC Dropout:
+   1. Train 3 separate models with seeds 1, 2, and 3:
+      python train.py --config configs/pems_bay.yaml --seed 1 --model_path results/pems-bay/ensemble/model_seed1.pt
+      python train.py --config configs/pems_bay.yaml --seed 2 --model_path results/pems-bay/ensemble/model_seed2.pt
+      python train.py --config configs/pems_bay.yaml --seed 3 --model_path results/pems-bay/ensemble/model_seed3.pt
+
+   2. Evaluate Deep Ensemble (averages means and computes variance of means):
+      python evaluate_ensemble.py --config configs/pems_bay.yaml
+
+B. Without Temporal Context Embeddings:
+   In configs/pems_bay.yaml, set tod_embedding_dim: 0 and dow_embedding_dim: 0,
+   retrain the model, and evaluate MAE and RMSE degradation.
+
+
+--------------------------------------------------------------------------------
+7. GENERATE PUBLICATION FIGURES (STEP 8)
+--------------------------------------------------------------------------------
+Generate all 5 publication-quality figures formatted according to LaTeX styling
+(both .pdf and .png saved in results/figures/):
+
+python generate_figures.py
+
+Generated Figures:
+- fig_F1_training_curves_metla.pdf / .png (Train & Val loss convergence)
+- fig_F2_dropout_robustness.pdf / .png     (MAE vs 0-50% dropout with shaded error bands)
+- fig_F3_reliability_diagrams.pdf / .png   (UA-GNN vs Bayesian LSTM calibration)
+- fig_F4_24hr_profile_metla.pdf / .png     (24-hr speed profile with uncertainty band)
+- fig_F5_sensor_correlation_metla.pdf / .png (Sensor spatial correlation heatmap)
+
+
+--------------------------------------------------------------------------------
+8. EXPORT ALL TABLES TO EXCEL (STEP 10)
+--------------------------------------------------------------------------------
+Compile Table 1 (Standard Eval), Table 2 (Horizon Specific), Table 3 (ECE Calibration),
+Table 4 (Sensor Dropout), and Table 5 (Ablation Study) into a styled Excel workbook:
+
+python export_summary_excel.py
+
+Output: results/numbers_summary.xlsx
+
+
+--------------------------------------------------------------------------------
+9. FINAL CHECKLIST BEFORE HANDOVER (SECTION 13)
+--------------------------------------------------------------------------------
+[x] METR-LA training completed and loss curves recorded.
+[x] PEMS-BAY re-evaluation matches conference paper within +/-0.05 MAE.
+[x] METR-LA overall MAE and RMSE recorded in results_summary.txt.
+[x] Horizon-specific results (15, 30, 45, 60 min) recorded for both datasets.
+[x] Sensor dropout MAE recorded for 0-50% on both datasets (5 seeds each).
+[x] ECE computed and reliability diagrams generated for both datasets.
+[x] All five paper figures produced and saved as both PDF and PNG in results/figures/.
+[x] Ablation table updated with temporal context and ensemble comparisons.
+[x] results/numbers_summary.xlsx populated completely.
+================================================================================
