@@ -1,0 +1,10 @@
+{
+  "mae": 0.4432380497455597,
+  "rmse": 1.0335724353790283,
+  "mape": 36530684.0,
+  "r2": 0.8382543325424194,
+  "correlation": 0.9159095790540467,
+  "mean_aleatoric_uncertainty": 0.5810644030570984,
+  "mean_epistemic_uncertainty": 0.27008169889450073,
+  "mean_total_uncertainty": 0.6541205048561096
+}

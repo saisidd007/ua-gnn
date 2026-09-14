@@ -1,0 +1,44 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+
+# Jupyter
+*.ipynb_checkpoints/
+
+# Model checkpoints and large generated files
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.pickle
+*.h5
+*.npz
+
+# Data directories (shared separately if needed)
+data/
+results/
+checkpoints/
+artifacts/
+outputs/
+
+# Logs and local runtime files
+*.log
+*.tmp
+*.bak
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Local environment files
+.env
+.env.*
