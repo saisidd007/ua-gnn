@@ -21,15 +21,24 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / 'results'
 RESULTS.mkdir(parents=True, exist_ok=True)
 
-json_50 = RESULTS / 'enhanced_training_results_20251119_054803.json'
+# Locate METR-LA training results JSON
+json_50 = RESULTS / 'enhanced_training_results_metrla_20260916_165902.json'
 if not json_50.exists():
-    print('50-epoch JSON not found at', json_50)
+    candidates = sorted(RESULTS.glob('enhanced_training_results_metrla_*.json'), key=lambda p: p.stat().st_mtime)
+    if not candidates:
+        candidates = sorted(RESULTS.glob('enhanced_training_results_*.json'), key=lambda p: p.stat().st_mtime)
+    if candidates:
+        json_50 = candidates[-1]
+
+if not json_50.exists():
+    print('METR-LA 50-epoch JSON not found in', RESULTS)
     raise SystemExit(1)
 
+print(f"Loading training results from: {json_50.name}")
 with json_50.open('r', encoding='utf-8') as f:
     js = json.load(f)
 
-history = js.get('training_history', {})
+history = js.get('training_history', js.get('history', {}))
 train_loss = history.get('train_loss', [])
 val_loss = history.get('val_loss', [])
 train_metrics = history.get('train_metrics', [])
@@ -86,10 +95,10 @@ else:
     print('No learning rate info in JSON; skipped LR plot')
 
 # Save test summary
-test_metrics = js.get('test_metrics', {})
+test_metrics = js.get('test_metrics', js.get('final_test_metrics', {}))
 if test_metrics:
     df = pd.DataFrame([test_metrics])
-    df.index = ['enhanced_50epoch']
+    df.index = ['enhanced_50epoch_metrla']
     df.to_csv(RESULTS / 'analysis_50epoch_test_summary.csv')
     print('Saved test summary CSV to results/analysis_50epoch_test_summary.csv')
     print(df.T)

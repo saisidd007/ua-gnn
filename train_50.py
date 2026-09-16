@@ -363,15 +363,16 @@ def main(num_epochs: int = 50, output_dir: str = 'results'):
     # Load dataset
     print("[DATA] Loading enhanced dataset...")
     dataset = create_enhanced_dataset(
-        root_dir='data',
+        root_dir='data/metr-la',
         sequence_length=12,
         prediction_length=12,
-        preprocessing_method='robust'
+        preprocessing_method='robust',
+        dataset_name='METR-LA'
     )
     
     print(f"[STATS] Dataset loaded:")
     print(f"   Sequences: {len(dataset.sequences)}")
-    print(f"   Sensors: 325")
+    print(f"   Sensors: {dataset.raw_data.shape[1]}")
     print(f"   Train/Val/Test: {len(dataset.train_indices)}/{len(dataset.val_indices)}/{len(dataset.test_indices)}\n")
     
     # Create data loaders

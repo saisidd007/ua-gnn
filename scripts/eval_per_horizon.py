@@ -18,7 +18,14 @@ def evaluate_per_horizon(checkpoint_path='results/enhanced_best_model.pt',
     device = device or (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
     print(f"Using device: {device}")
 
-    dataset = create_enhanced_dataset(root_dir='data', sequence_length=12, prediction_length=12, preprocessing_method='robust')
+    data_dir = 'data/metr-la' if os.path.exists('data/metr-la') else 'data'
+    dataset = create_enhanced_dataset(
+        root_dir=data_dir,
+        sequence_length=12,
+        prediction_length=12,
+        preprocessing_method='robust',
+        dataset_name='METR-LA' if 'metr-la' in data_dir else 'PEMS-BAY'
+    )
     test_data = dataset.get_test_data()
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=0)
 

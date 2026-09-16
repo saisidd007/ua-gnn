@@ -38,27 +38,36 @@ DATA = ROOT / 'data'
 RESULTS.mkdir(parents=True, exist_ok=True)
 
 # Paths
-json_50_path = RESULTS / 'enhanced_training_results_20251119_054803.json'
+json_50_path = RESULTS / 'enhanced_training_results_metrla_20260916_165902.json'
 # If the exact JSON isn't present, try to detect the most recent enhanced_training_results_*.json
 if not json_50_path.exists():
     import glob
-    json_candidates = sorted(RESULTS.glob('enhanced_training_results_*.json'), key=lambda p: p.stat().st_mtime)
+    json_candidates = sorted(RESULTS.glob('enhanced_training_results_metrla_*.json'), key=lambda p: p.stat().st_mtime)
+    if not json_candidates:
+        json_candidates = sorted(RESULTS.glob('enhanced_training_results_*.json'), key=lambda p: p.stat().st_mtime)
     if json_candidates:
         json_50_path = json_candidates[-1]
         print(f"Using latest training JSON: {json_50_path}")
     else:
         print('No training JSON found in results/. Training history plots will be skipped.')
-meta_path = DATA / 'PEMS-BAY-META.csv'
-pems_csv_path = DATA / 'PEMS-BAY.csv'
+
+meta_path = DATA / 'metr-la' / 'METR-LA-META.csv'
+if not meta_path.exists():
+    meta_path = DATA / 'METR-LA-META.csv'
+
+metr_csv_path = DATA / 'metr-la' / 'METR-LA.csv'
+if not metr_csv_path.exists():
+    metr_csv_path = DATA / 'METR-LA.csv'
 
 # 1) Load training JSON
 with open(json_50_path, 'r', encoding='utf-8') as f:
     res50 = json.load(f)
 
-train_loss = res50.get('training_history', {}).get('train_loss', [])
-val_loss = res50.get('training_history', {}).get('val_loss', [])
-train_metrics = res50.get('training_history', {}).get('train_metrics', [])
-val_metrics = res50.get('training_history', {}).get('val_metrics', [])
+history = res50.get('training_history', res50.get('history', {}))
+train_loss = history.get('train_loss', [])
+val_loss = history.get('val_loss', [])
+train_metrics = history.get('train_metrics', [])
+val_metrics = history.get('val_metrics', [])
 
 # Plot train/val loss curve
 plt.figure(figsize=(8, 5))
@@ -90,29 +99,29 @@ if train_metrics and val_metrics:
     plt.close()
 
 # Save summary test metrics to CSV
-test_metrics = res50.get('test_metrics', {})
+test_metrics = res50.get('test_metrics', res50.get('final_test_metrics', {}))
 summary_df = pd.DataFrame([test_metrics])
-summary_df.index = ['enhanced_50epoch']
+summary_df.index = ['enhanced_50epoch_metrla']
 summary_df.to_csv(RESULTS / 'analysis_50epoch_test_summary.csv')
 print('\nSaved test summary to', RESULTS / 'analysis_50epoch_test_summary.csv')
 print(summary_df.T)
 
-# 2) Load meta and PEMS-BAY CSV with robust column alignment
+# 2) Load meta and METR-LA CSV with robust column alignment
 meta_df = pd.read_csv(meta_path)
 meta_sensor_ids = meta_df['sensor_id'].astype(str).tolist()
 print(f"Loaded {len(meta_sensor_ids)} sensor IDs from meta file.")
 
-# Read the PEMS-BAY CSV but avoid assuming column 0 is a sensor. We'll try to detect index/timestamp column.
-print('Attempting to load PEMS-BAY data (may be large).')
+# Read the METR-LA CSV but avoid assuming column 0 is a sensor. We'll try to detect index/timestamp column.
+print('Attempting to load METR-LA data (may be large).')
 # Use pandas to infer the index column: if first column name starts with 'Unnamed' or 'timestamp', set as index
 try:
-    df = pd.read_csv(pems_csv_path, low_memory=False)
+    df = pd.read_csv(metr_csv_path, low_memory=False)
 except Exception as e:
-    print('Error reading PEMS-BAY.csv:', e)
+    print('Error reading METR-LA.csv:', e)
     df = None
 
 if df is not None:
-    print('PEMS-BAY columns (first 10):', list(df.columns[:10]))
+    print('METR-LA columns (first 10):', list(df.columns[:10]))
 
     # If the first column is an unnamed index or time, set it as index
     first_col = df.columns[0]
@@ -158,7 +167,7 @@ if df is not None:
 
     print('Saved sample sensor time-series plots to results/.')
 else:
-    print('PEMS-BAY.csv could not be loaded; sensor plots skipped.')
+    print('METR-LA.csv could not be loaded; sensor plots skipped.')
 
     print('\nAnalysis script completed (plots).')
 
@@ -169,7 +178,7 @@ else:
 
 def run_inference_and_per_horizon_metrics(
     checkpoint_path: str = str(RESULTS / 'enhanced_best_model.pt'),
-    root_dir: str = str(DATA),
+    root_dir: str = str(DATA / 'metr-la' if (DATA / 'metr-la').exists() else DATA),
     sequence_length: int = 12,
     prediction_length: int = 12,
     device: str = None,
@@ -203,10 +212,15 @@ def run_inference_and_per_horizon_metrics(
 
     # Build dataset
     try:
-        dataset = create_enhanced_dataset(root_dir=root_dir, sequence_length=sequence_length, prediction_length=prediction_length)
+        dataset = create_enhanced_dataset(
+            root_dir=root_dir,
+            sequence_length=sequence_length,
+            prediction_length=prediction_length,
+            dataset_name='METR-LA'
+        )
     except Exception as e:
         print('Failed to create enhanced dataset for inference:', e)
-        print('Make sure `data/PEMS-BAY.csv` and metadata are present and readable on this machine.')
+        print('Make sure `data/metr-la/METR-LA.csv` and metadata are present and readable on this machine.')
         return None
 
     test_data = dataset.get_test_data()

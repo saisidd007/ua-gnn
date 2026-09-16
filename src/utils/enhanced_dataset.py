@@ -465,28 +465,94 @@ class EnhancedMETRLADataset(Dataset):
         print(f"   Train: {len(self.train_indices)}, Val: {len(self.val_indices)}, Test: {len(self.test_indices)}")
     
     def _load_raw_data(self) -> Tuple[np.ndarray, np.ndarray, Optional[pd.DataFrame]]:
-        """Load raw METR-LA data from HDF5 file"""
-        # Load traffic data from HDF5
-        data_path = os.path.join(self.root_dir, 'METR-LA.h5')
-        if not os.path.exists(data_path):
-            raise FileNotFoundError(f"Data file not found: {data_path}")
+        """Load raw METR-LA data from CSV or HDF5, adjacency matrix, and metadata"""
+        # Load traffic data
+        csv_candidates = [
+            os.path.join(self.root_dir, 'METR-LA.csv'),
+            os.path.join(self.root_dir, 'metr-la', 'METR-LA.csv')
+        ]
+        h5_candidates = [
+            os.path.join(self.root_dir, 'metr-la.h5'),
+            os.path.join(self.root_dir, 'METR-LA.h5'),
+            os.path.join(self.root_dir, 'metr-la', 'metr-la.h5')
+        ]
+        
+        data_path = None
+        is_csv = False
+        for p in csv_candidates:
+            if os.path.exists(p):
+                data_path = p
+                is_csv = True
+                break
+        if not data_path:
+            for p in h5_candidates:
+                if os.path.exists(p):
+                    data_path = p
+                    is_csv = False
+                    break
+        
+        if not data_path or not os.path.exists(data_path):
+            raise FileNotFoundError(f"Data file not found in {self.root_dir} (looked for METR-LA.csv, metr-la.h5, METR-LA.h5)")
         
         print(f"[LOAD] Loading data from {data_path}")
-        df = pd.read_hdf(data_path)
-        data = df.values
+        if is_csv:
+            df = pd.read_csv(data_path)
+            first_col_sample = str(df.iloc[0, 0])
+            if any(char in first_col_sample for char in ['-', ':', ' ']) or str(df.columns[0]).lower() in ['time', 'timestamp', 'date', 'unnamed: 0']:
+                data = df.iloc[:, 1:].values
+                print(f"   Detected timestamp column, using columns 1-{df.shape[1]-1}")
+            else:
+                data = df.values
+        else:
+            df = pd.read_hdf(data_path)
+            data = df.values
         
         print(f"   Data shape: {data.shape}")
         print(f"   Number of sensors: {data.shape[1]}")
         
-        # For METR-LA, create identity adjacency matrix (no pre-computed adjacency available)
-        # In a full implementation, you could compute it based on sensor locations
-        adjacency_matrix = np.eye(data.shape[1], dtype=np.float32)
-        print(f"   Using identity adjacency matrix (shape: {adjacency_matrix.shape})")
+        # Load adjacency matrix
+        adj_candidates = [
+            os.path.join(self.root_dir, 'adj_mx_METR-LA.pkl'),
+            os.path.join(self.root_dir, 'adj_mx.pkl'),
+            os.path.join(self.root_dir, 'metr-la', 'adj_mx_METR-LA.pkl'),
+            os.path.join(self.root_dir, 'metr-la', 'adj_mx.pkl')
+        ]
+        adjacency_matrix = None
+        for adj_path in adj_candidates:
+            if os.path.exists(adj_path):
+                try:
+                    with open(adj_path, 'rb') as f:
+                        raw = f.read().replace(b'\r\n', b'\n')
+                        adj_data = pickle.loads(raw, encoding='latin1')
+                        if isinstance(adj_data, list):
+                            adjacency_matrix = adj_data[2]
+                        else:
+                            adjacency_matrix = adj_data
+                    print(f"   Adjacency matrix loaded from {adj_path} (shape: {adjacency_matrix.shape})")
+                    break
+                except Exception as e:
+                    print(f"   [WARN] Error loading adjacency matrix from {adj_path}: {e}")
         
-        # No metadata file for METR-LA
+        if adjacency_matrix is None:
+            print("   [WARN] Adjacency matrix not found, creating identity matrix")
+            adjacency_matrix = np.eye(data.shape[1], dtype=np.float32)
+        
+        # Load metadata if available
+        meta_candidates = [
+            os.path.join(self.root_dir, 'METR-LA-META.csv'),
+            os.path.join(self.root_dir, 'metr-la', 'METR-LA-META.csv')
+        ]
         metadata = None
+        for meta_path in meta_candidates:
+            if os.path.exists(meta_path):
+                try:
+                    metadata = pd.read_csv(meta_path)
+                    print(f"   Metadata loaded: {len(metadata)} sensors")
+                    break
+                except Exception as e:
+                    print(f"   [WARN] Error loading metadata from {meta_path}: {e}")
         
-        return data.astype(np.float32), adjacency_matrix, metadata
+        return data.astype(np.float32), adjacency_matrix.astype(np.float32), metadata
     
     def _print_missing_data_report(self):
         """Print detailed missing data analysis report"""
@@ -641,7 +707,7 @@ def create_enhanced_dataset(
     Returns:
         Enhanced dataset (PEMS-BAY or METR-LA)
     """
-    if dataset_name.upper() == 'METR-LA':
+    if dataset_name.upper() in ['METR-LA', 'METRLA'] or 'metr-la' in str(root_dir).lower() or 'metrla' in str(root_dir).lower():
         return EnhancedMETRLADataset(
             root_dir=root_dir,
             sequence_length=sequence_length,

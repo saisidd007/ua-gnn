@@ -8,9 +8,22 @@ import matplotlib.pyplot as plt
 print("[PLOTTING] Creating MAE Trend Graph for METR-LA...")
 
 # Load results
-results_file = "results/enhanced_training_results_metrla_20260502_125606.json"
-with open(results_file, 'r') as f:
-    results = json.load(f)
+import glob, os
+json_files = sorted(glob.glob("results/enhanced_training_results_*.json"), key=os.path.getmtime, reverse=True)
+results_file = None
+for jf in json_files:
+    try:
+        with open(jf, 'r') as f:
+            data = json.load(f)
+            if 'history' in data and 'train_metrics' in data['history']:
+                results_file = jf
+                results = data
+                break
+    except Exception:
+        pass
+if not results_file:
+    raise FileNotFoundError("Could not find any training results JSON with 'history' in results/")
+print(f"Loaded results from: {results_file}")
 
 # Extract MAE values from metrics
 train_metrics = results['history']['train_metrics']

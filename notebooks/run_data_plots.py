@@ -1,5 +1,5 @@
 """
-Generate dataset-dependent figures for PEMS-BAY (does NOT run model inference).
+Generate dataset-dependent figures for METR-LA (does NOT run model inference).
 Saves figures to results/.
 Run:
 python notebooks/run_data_plots.py
@@ -17,12 +17,17 @@ DATA = ROOT / 'data'
 RESULTS = ROOT / 'results'
 RESULTS.mkdir(parents=True, exist_ok=True)
 
-pems_csv = DATA / 'PEMS-BAY.csv'
-meta_csv = DATA / 'PEMS-BAY-META.csv'
+metr_csv = DATA / 'metr-la' / 'METR-LA.csv'
+if not metr_csv.exists():
+    metr_csv = DATA / 'METR-LA.csv'
+
+meta_csv = DATA / 'metr-la' / 'METR-LA-META.csv'
+if not meta_csv.exists():
+    meta_csv = DATA / 'METR-LA-META.csv'
 
 print('Loading dataset...')
 # Read with low_memory=False
-df = pd.read_csv(pems_csv, low_memory=False)
+df = pd.read_csv(metr_csv, low_memory=False)
 print('Raw columns sample:', list(df.columns[:10]))
 # Detect index column
 first_col = str(df.columns[0])

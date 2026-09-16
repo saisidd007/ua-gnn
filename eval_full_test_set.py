@@ -50,10 +50,12 @@ def evaluate_full_test_set(
     
     # Load dataset
     print("Loading dataset...")
+    data_dir = str(DATA / 'metr-la') if (DATA / 'metr-la').exists() else str(DATA)
     dataset = create_enhanced_dataset(
-        root_dir=str(DATA),
+        root_dir=data_dir,
         sequence_length=12,
-        prediction_length=12
+        prediction_length=12,
+        dataset_name='METR-LA' if 'metr-la' in data_dir else 'PEMS-BAY'
     )
     test_data = dataset.get_test_data()
     test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=0)

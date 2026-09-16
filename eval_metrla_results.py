@@ -59,7 +59,7 @@ def main():
     # Load dataset
     print("[DATA] Loading METR-LA dataset for evaluation...")
     dataset = create_enhanced_dataset(
-        root_dir='data',
+        root_dir='data/metr-la',
         sequence_length=12,
         prediction_length=12,
         preprocessing_method='robust',
@@ -78,8 +78,11 @@ def main():
     ).to(device)
     
     try:
-        model.load_state_dict(torch.load('results/best_model_metrla.pt', map_location=device))
-        print("✓ Model loaded successfully")
+        model_path = 'results/enhanced_best_model.pt' if os.path.exists('results/enhanced_best_model.pt') else 'results/best_model_metrla.pt'
+        ckpt = torch.load(model_path, map_location=device)
+        state_dict = ckpt['model_state_dict'] if isinstance(ckpt, dict) and 'model_state_dict' in ckpt else ckpt
+        model.load_state_dict(state_dict)
+        print(f"✓ Model loaded successfully from {model_path}")
     except Exception as e:
         print(f"✗ Error loading model: {e}")
         return
