@@ -24,7 +24,6 @@ __pycache__/
 
 # Data directories (shared separately if needed)
 data/
-results/
 checkpoints/
 artifacts/
 outputs/
